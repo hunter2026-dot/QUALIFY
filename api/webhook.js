@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import ws from 'ws';
 
 const db = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
+  'https://ehcvdzdvlmzjgpcbiadt.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoY3ZkemR2bG16amdwY2JpYWR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMDM4MjMsImV4cCI6MjA5NzY3OTgyM30.e2FUKdjCLMStqzA9M4gKoWy90wSOCj9fkJFd6fGpy1E',
   { realtime: { transport: ws } }
 );
 
