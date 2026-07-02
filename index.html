@@ -537,13 +537,6 @@ let waConnected=false, qrInterval=null, realtimeChannel=null;
 let currentUser=null, currentPerfil=null;
 
 async function init() {
-  // Pega sessão do magic link na URL
-  const { data: { session } } = await db.auth.getSession();
-  if (session) {
-    await onLogin(session.user);
-  } else {
-    document.getElementById('login-page').style.display = 'flex';
-  }
   const { data: { session } } = await db.auth.getSession();
   if (session) {
     await onLogin(session.user);
