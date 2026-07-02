@@ -1,10 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
-import ws from 'ws';
 
 const db = createClient(
   'https://ehcvdzdvlmzjgpcbiadt.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoY3ZkemR2bG16amdwY2JpYWR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMDM4MjMsImV4cCI6MjA5NzY3OTgyM30.e2FUKdjCLMStqzA9M4gKoWy90wSOCj9fkJFd6fGpy1E',
-  { realtime: { transport: ws } }
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoY3ZkemR2bG16amdwY2JpYWR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMDM4MjMsImV4cCI6MjA5NzY3OTgyM30.e2FUKdjCLMStqzA9M4gKoWy90wSOCj9fkJFd6fGpy1E'
 );
 
 function normalizePhone(raw) {
@@ -13,7 +11,9 @@ function normalizePhone(raw) {
 }
 
 export default async function handler(req, res) {
+  console.log('MÉTODO:', req.method);
   console.log('BODY:', JSON.stringify(req.body));
+
   if (req.method !== 'POST') return res.status(200).json({ ok: true });
 
   try {
@@ -25,20 +25,27 @@ export default async function handler(req, res) {
     const timestamp = body.momment
       ? new Date(body.momment * 1000).toISOString()
       : new Date().toISOString();
-    const tipo = body.type || 'texto';
 
-    if (!phone || !text) return res.status(200).json({ ok: true, skipped: true });
+    console.log('PHONE:', phone, 'TEXT:', text);
 
-    const { data: leads } = await db
+    if (!phone || !text) {
+      console.log('SKIPPED - sem phone ou text');
+      return res.status(200).json({ ok: true, skipped: true, phone, text });
+    }
+
+    const { data: leads, error: errBusca } = await db
       .from('leads')
       .select('id')
       .or(`telefone.eq.${phone},telefone.eq.+${phone},telefone.eq.55${phone}`)
       .limit(1);
 
+    console.log('LEADS ENCONTRADOS:', JSON.stringify(leads), 'ERRO BUSCA:', JSON.stringify(errBusca));
+
     let leadId;
 
     if (leads && leads.length > 0) {
       leadId = leads[0].id;
+      console.log('LEAD EXISTENTE:', leadId);
     } else {
       const { data: novoLead, error: errLead } = await db
         .from('leads')
@@ -53,6 +60,8 @@ export default async function handler(req, res) {
         .select('id')
         .single();
 
+      console.log('NOVO LEAD:', JSON.stringify(novoLead), 'ERRO:', JSON.stringify(errLead));
+
       if (errLead) return res.status(200).json({ ok: false, error: errLead.message });
       leadId = novoLead.id;
     }
@@ -61,13 +70,15 @@ export default async function handler(req, res) {
       lead_id: leadId,
       direcao: isFromMe ? 'enviada' : 'recebida',
       conteudo: text,
-      tipo,
+      tipo: body.type || 'texto',
       timestamp_wa: timestamp
     });
 
-    if (errMsg) return res.status(200).json({ ok: false, error: errMsg.message });
+    console.log('ERRO MSG:', JSON.stringify(errMsg));
+
     return res.status(200).json({ ok: true, leadId });
   } catch (e) {
+    console.log('EXCEPTION:', e.message);
     return res.status(200).json({ ok: false, error: e.message });
   }
 }
