@@ -537,12 +537,16 @@ let waConnected=false, qrInterval=null, realtimeChannel=null;
 let currentUser=null, currentPerfil=null;
 
 async function init() {
-  const { data: { session } } = await db.auth.getSession();
-  if (session) {
-    await onLogin(session.user);
-  } else {
-    document.getElementById('login-page').style.display = 'flex';
-  }
+  currentUser = { id: '00000000-0000-0000-0000-000000000000' };
+  currentPerfil = { nome: 'Vinicius', role: 'admin' };
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('user-nome').textContent = 'Vinicius';
+  document.getElementById('user-avatar').textContent = 'V';
+  document.body.classList.add('is-admin');
+  await Promise.all([loadLeads(), loadCampos(), loadSDRs()]);
+  renderKanban(); renderCamposList();
+  checkWAStatus(); startRealtime();
 }
 
 async function fazerLogin() {
