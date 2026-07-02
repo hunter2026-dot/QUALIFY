@@ -222,10 +222,10 @@ textarea.form-input{resize:vertical;min-height:80px;}
     <div class="login-logo">Hunter<span>CRM</span></div>
     <div class="login-sub">Acesse sua conta</div>
     <div class="login-form">
-      <input class="login-input" id="login-email" type="email" placeholder="Email" onkeydown="if(event.key==='Enter')fazerLogin()">
-      <input class="login-input" id="login-senha" type="password" placeholder="Senha" onkeydown="if(event.key==='Enter')fazerLogin()">
-      <div class="login-error" id="login-error">Email ou senha incorretos</div>
-      <button class="login-btn" onclick="fazerLogin()">Entrar</button>
+      <input class="login-input" id="login-email" type="email" placeholder="Seu email" onkeydown="if(event.key==='Enter')fazerLogin()">
+      <div class="login-error" id="login-error">Email não encontrado ou erro ao enviar</div>
+      <div id="login-success" style="color:var(--green);font-size:12px;text-align:center;display:none">✓ Link enviado! Verifique seu email.</div>
+      <button class="login-btn" id="login-btn" onclick="fazerLogin()">Enviar link de acesso</button>
     </div>
   </div>
 </div>
@@ -537,6 +537,13 @@ let waConnected=false, qrInterval=null, realtimeChannel=null;
 let currentUser=null, currentPerfil=null;
 
 async function init() {
+  // Pega sessão do magic link na URL
+  const { data: { session } } = await db.auth.getSession();
+  if (session) {
+    await onLogin(session.user);
+  } else {
+    document.getElementById('login-page').style.display = 'flex';
+  }
   const { data: { session } } = await db.auth.getSession();
   if (session) {
     await onLogin(session.user);
@@ -547,12 +554,20 @@ async function init() {
 
 async function fazerLogin() {
   const email = document.getElementById('login-email').value.trim();
-  const senha = document.getElementById('login-senha').value;
   const errEl = document.getElementById('login-error');
+  const sucEl = document.getElementById('login-success');
+  const btn = document.getElementById('login-btn');
   errEl.style.display = 'none';
-  const { data, error } = await db.auth.signInWithPassword({ email, password: senha });
+  sucEl.style.display = 'none';
+  if (!email) { errEl.style.display = 'block'; return; }
+  btn.textContent = 'Enviando...'; btn.disabled = true;
+  const { error } = await db.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: 'https://hunter-crm-green.vercel.app' }
+  });
+  btn.textContent = 'Enviar link de acesso'; btn.disabled = false;
   if (error) { errEl.style.display = 'block'; return; }
-  await onLogin(data.user);
+  sucEl.style.display = 'block';
 }
 
 async function onLogin(user) {
