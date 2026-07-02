@@ -6,7 +6,7 @@ const db = createClient(
 );
 
 function normalizePhone(raw) {
-  if (!raw) return null;
+  if (!raw) return null; 
   return raw.replace(/\D/g, '').replace(/@.*$/, '').replace(/^0+/, '');
 }
 
