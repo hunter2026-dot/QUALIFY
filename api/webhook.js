@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
 const db = createClient(
   'https://ehcvdzdvlmzjgpcbiadt.supabase.co',
@@ -11,7 +11,7 @@ function normalizePhone(raw) {
   return raw.replace(/\D/g, '').replace(/@.*$/, '').replace(/^0+/, '');
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   console.log('BODY:', JSON.stringify(req.body));
   if (req.method !== 'POST') return res.status(200).json({ ok: true });
 
@@ -26,7 +26,6 @@ export default async function handler(req, res) {
       : new Date().toISOString();
 
     console.log('PHONE:', phone, 'TEXT:', text);
-
     if (!phone || !text) return res.status(200).json({ ok: true, skipped: true, phone, text });
 
     const { data: leads, error: errBusca } = await db
@@ -70,7 +69,7 @@ export default async function handler(req, res) {
     console.log('MSG ERR:', JSON.stringify(errMsg));
     return res.status(200).json({ ok: true, leadId });
   } catch (e) {
-    console.log('EXCEPTION:', e.message, e.stack);
+    console.log('EXCEPTION:', e.message);
     return res.status(200).json({ ok: false, error: e.message });
   }
 }
