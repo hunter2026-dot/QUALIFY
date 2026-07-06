@@ -1,9 +1,10 @@
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 
 const db = createClient(
   'https://ehcvdzdvlmzjgpcbiadt.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVoY3ZkemR2bG16amdwY2JpYWR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMDM4MjMsImV4cCI6MjA5NzY3OTgyM30.e2FUKdjCLMStqzA9M4gKoWy90wSOCj9fkJFd6fGpy1E',
-  { auth: { persistSession: false } }
+  { auth: { persistSession: false }, realtime: { transport: ws } }
 );
 
 function normalizePhone(raw) {
