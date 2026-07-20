@@ -1,0 +1,128 @@
+// api/poll-transcripts.js
+// Roda via Vercel Cron a cada 5 min (ver vercel.json).
+// 1. Busca chamadas recentes na API4COM (/calls)
+// 2. Salva as que tem metadata.lead_phone (ou seja, saíram do nosso CRM) no Supabase
+// 3. Para as que já têm record_url mas ainda não têm transcrição, baixa o áudio
+//    e manda pro Whisper (OpenAI)
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+const MAX_TRANSCRIPTIONS_PER_RUN = 5; // controla custo/tempo por execução
+const CALLS_PAGES_TO_CHECK = 2;       // quantas páginas do /calls olhar por execução
+
+export default async function handler(req, res) {
+  // Vercel injeta esse header automaticamente em cron jobs quando
+  // a env var CRON_SECRET está configurada no projeto.
+  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  const summary = { calls_seen: 0, calls_saved: 0, transcribed: 0, errors: [] };
+
+  try {
+    // 1) Buscar chamadas recentes na API4COM
+    for (let page = 1; page <= CALLS_PAGES_TO_CHECK; page++) {
+      const r = await fetch(`https://api.api4com.com/api/v1/calls?page=${page}`, {
+        headers: { Authorization: process.env.API4COM_TOKEN }
+      });
+      if (!r.ok) {
+        summary.errors.push(`Erro ao listar calls (page ${page}): HTTP ${r.status}`);
+        break;
+      }
+      const body = await r.json();
+      const calls = body.data || [];
+      summary.calls_seen += calls.length;
+      if (!calls.length) break;
+
+      for (const call of calls) {
+        const leadPhone = call.metadata && call.metadata.lead_phone;
+        if (!leadPhone) continue; // não veio do nosso Kanban, ignora
+
+        const { data: existing } = await supabase
+          .from('call_recordings')
+          .select('id, transcript_status, record_url')
+          .eq('api4com_call_id', call.id)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase.from('call_recordings').insert({
+            api4com_call_id: call.id,
+            lead_phone: leadPhone,
+            started_at: call.started_at,
+            duration_seconds: call.duration,
+            record_url: call.record_url || null,
+            transcript_status: call.record_url ? 'pendente' : 'sem_gravacao'
+          });
+          summary.calls_saved++;
+        } else if (!existing.record_url && call.record_url) {
+          // a gravação não estava pronta na primeira passada, chegou agora
+          await supabase
+            .from('call_recordings')
+            .update({ record_url: call.record_url, transcript_status: 'pendente' })
+            .eq('id', existing.id);
+        }
+      }
+    }
+
+    // 2) Transcrever pendentes
+    const { data: pending, error: pendingErr } = await supabase
+      .from('call_recordings')
+      .select('*')
+      .eq('transcript_status', 'pendente')
+      .not('record_url', 'is', null)
+      .limit(MAX_TRANSCRIPTIONS_PER_RUN);
+
+    if (pendingErr) throw pendingErr;
+
+    for (const row of pending || []) {
+      try {
+        await supabase
+          .from('call_recordings')
+          .update({ transcript_status: 'transcrevendo' })
+          .eq('id', row.id);
+
+        const audioRes = await fetch(row.record_url);
+        if (!audioRes.ok) throw new Error(`Falha ao baixar áudio: HTTP ${audioRes.status}`);
+        const audioBuffer = await audioRes.arrayBuffer();
+
+        const form = new FormData();
+        form.append('file', new Blob([audioBuffer]), 'call.mp3');
+        form.append('model', 'whisper-1');
+        form.append('language', 'pt');
+
+        const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+          body: form
+        });
+        const whisperData = await whisperRes.json();
+
+        if (!whisperRes.ok || !whisperData.text) {
+          throw new Error(whisperData.error?.message || 'Whisper não retornou texto');
+        }
+
+        await supabase
+          .from('call_recordings')
+          .update({ transcript: whisperData.text, transcript_status: 'pronto' })
+          .eq('id', row.id);
+
+        summary.transcribed++;
+      } catch (e) {
+        await supabase
+          .from('call_recordings')
+          .update({ transcript_status: 'erro', error_message: String(e.message || e) })
+          .eq('id', row.id);
+        summary.errors.push(`call ${row.api4com_call_id}: ${e.message || e}`);
+      }
+    }
+
+    return res.status(200).json({ ok: true, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || String(e), ...summary });
+  }
+}
