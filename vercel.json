@@ -14,5 +14,8 @@
         { "key": "Cache-Control", "value": "no-store, no-cache" }
       ]
     }
+  ],
+  "crons": [
+    { "path": "/api/poll-transcripts", "schedule": "*/5 * * * *" }
   ]
 }
