@@ -1,0 +1,26 @@
+// api/get-transcript.js
+// GET /api/get-transcript?phone=5551999999999
+// Retorna todas as calls (com gravação/transcrição) daquele telefone, mais recente primeiro.
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+export default async function handler(req, res) {
+  const { phone } = req.query;
+  if (!phone) return res.status(400).json({ error: 'parametro phone e obrigatorio' });
+
+  const clean = String(phone).replace(/\D/g, '');
+
+  const { data, error } = await supabase
+    .from('call_recordings')
+    .select('id, started_at, duration_seconds, record_url, transcript, transcript_status')
+    .ilike('lead_phone', `%${clean.slice(-8)}%`) // compara pelos últimos 8 dígitos, evita mismatch de +55/DDI
+    .order('started_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(200).json({ calls: data || [] });
+}
